@@ -12,16 +12,26 @@ def estimate_bus_factor(repos: list[dict]) -> dict:
     """
     factors = []
     for r in repos:
-        commits = r.get("commit_count", 0)
-        if commits == 0: continue
-        
+        # Use full-history share if available (provided by fetcher)
+        user_share = r.get("user_share_all_time", 0)
         n_contribs = max(r.get("contributor_count", 1), 1)
-        user_commits = r.get("user_contribution_count", 0)
-        user_share = (user_commits / commits) * 100
         
-        # Heuristic: if one person does 80%+ work, factor is 1
-        factor = 1 if user_share > 80 else 2 if user_share > 50 else 3 + (n_contribs // 5)
-        factors.append({"repo": r["name"], "factor": factor, "user_share": user_share})
+        # Heuristic for project sustainability:
+        # If one person does 80%+ work (all time), factor is 1 (high risk)
+        if user_share > 80:
+            factor = 1
+        elif user_share > 50:
+            factor = 2
+        else:
+            # Scale factor based on number of contributors
+            factor = 3 + min(n_contribs // 3, 7)
+            
+        factors.append({
+            "repo": r["name"],
+            "factor": factor,
+            "user_share": round(user_share, 1),
+            "n_contribs": n_contribs
+        })
     
     if not factors:
         return {"factors": [], "avg_factor": 0, "risk": "N/A (No commits found)"}

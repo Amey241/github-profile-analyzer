@@ -17,11 +17,13 @@ DOC_LOVER_THRESHOLD = 0.70         # >70% repos have a README
 PROLIFIC_COMMITTER_THRESHOLD = 50  # avg commits per repo
 WEEKEND_WARRIOR_THRESHOLD = 0.35   # >35% commits on Sat/Sun
 
-# LDA topic labels (matched to trained topic index via top word heuristic)
-TOPIC_LABELS = ["bug", "feature", "refactor", "docs"]
-
-# Colors
-ACCENT_COLORS = [
-    "#6C63FF", "#FF6584", "#43DDE6", "#F9A826",
-    "#7ED957", "#FF8C42", "#A855F7", "#EC4899",
+# Project Ecosystem Manifests
+MANIFEST_FILES = [
+    "requirements.txt", "package.json", "Gemfile", "go.mod", 
+    "pyproject.toml", "Pipfile", "pom.xml", "build.gradle",
+    "composer.json", "Cargo.toml"
 ]
+
+# Bus Factor Stats settings
+BUS_FACTOR_RETRIES = 3
+BUS_FACTOR_SLEEP = 2

@@ -6,15 +6,29 @@ Fetches profile, repos, and commits using PyGithub with parallel processing.
 import os
 import json
 import re
+import time
 from datetime import datetime, timezone, timedelta
 from github import Github, GithubException, RateLimitExceededException
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from config import CACHE_DIR, CACHE_TTL_HOURS, REPO_COMMIT_CAP
+from config import (
+    CACHE_DIR, CACHE_TTL_HOURS, REPO_COMMIT_CAP,
+    MANIFEST_FILES, BUS_FACTOR_RETRIES, BUS_FACTOR_SLEEP
+)
 
 class GitHubFetcher:
     def __init__(self, token: str):
         self.g = Github(token, per_page=100)
+
+    def _get_stats_contributors_with_retry(self, repo):
+        """GitHub computes stats async; retry if it returns None."""
+        for _ in range(BUS_FACTOR_RETRIES):
+            try:
+                stats = repo.get_stats_contributors()
+                if stats: return stats
+            except: pass
+            time.sleep(BUS_FACTOR_SLEEP)
+        return []
 
     # ------------------------------------------------------------------ #
     #  Cache helpers
@@ -130,9 +144,15 @@ class GitHubFetcher:
                 if repo.pushed_at:
                     recently_active = (datetime.now(timezone.utc) - repo.pushed_at.replace(tzinfo=timezone.utc)).days < 90
 
-                contributor_count = 1
-                try: contributor_count = repo.get_contributors().totalCount
-                except: pass
+                # 4. Bus Factor Data (High accuracy)
+                total_stats = self._get_stats_contributors_with_retry(repo)
+                user_share_all_time = 0
+                if total_stats:
+                    total_commits_all = sum(c.total for c in total_stats)
+                    if total_commits_all > 0:
+                        user_stat = next((c for c in total_stats if c.author and c.author.login == username), None)
+                        if user_stat:
+                            user_share_all_time = (user_stat.total / total_commits_all) * 100
 
                 return {
                     "repo_data": {
@@ -147,6 +167,7 @@ class GitHubFetcher:
                         "recently_active": recently_active,
                         "contributor_count": contributor_count,
                         "user_contribution_count": len(repo_commits),
+                        "user_share_all_time": user_share_all_time,
                         "commit_count": repo.get_commits().totalCount if index < 10 else len(repo_commits)
                     },
                     "commits": repo_commits,
@@ -166,12 +187,14 @@ class GitHubFetcher:
                     for l, v in res["languages"].items():
                         lang_totals[l] = lang_totals.get(l, 0) + v
 
-        # PRs & Issues (Directly from search)
+        # PRs & Issues (Robust totalCount)
         issues_authored = 0
         prs_authored = 0
         try:
-            issues_authored = self.g.search_issues(f"author:{username} is:issue").totalCount
-            prs_authored = self.g.search_issues(f"author:{username} is:pr").totalCount
+            issue_search = self.g.search_issues(f"author:{username} is:issue")
+            prs_search = self.g.search_issues(f"author:{username} is:pr")
+            issues_authored = issue_search.totalCount
+            prs_authored = prs_search.totalCount
         except: pass
 
         return {
@@ -249,7 +272,8 @@ class GitHubFetcher:
             
             def fetch_deps(repo):
                 deps = []
-                manifest_names = ["requirements.txt", "package.json", "Gemfile", "go.mod"]
+                # Use expanded list from config
+                manifest_names = MANIFEST_FILES
                 try:
                     contents = repo.get_contents("")
                     depth = 0
