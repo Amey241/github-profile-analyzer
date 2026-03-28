@@ -301,58 +301,30 @@ def run_pipeline(username: str, token: str) -> dict:
         "commit_weekdays": weekdays,
         "repos":          raw["repos"],
         "dominant_topic": topics["dominant_topic"],
-        "avg_sentiment":  sentiment["avg_polarity"],
-        "prs_authored":   raw["prs_authored"],
-        "issues_authored": raw["issues_authored"],
-        "followers":       raw["profile"].get("followers", 0),
-    }
-    badges = classify(user_stats)
-    narrative = generate_narrative(user_stats, raw["profile"])
-    achievements = achievement_trophy_case(user_stats, raw["profile"], lang_df)
-
-    # Career Arc
-    try:
-        arc_df = analyze_career_arc(commits)
-        arc_viz = career_arc_timeline(arc_df)
-        capsule = time_capsule_message(arc_df, raw["profile"])
-    except Exception:
-        arc_df, arc_viz, capsule = pd.DataFrame(), None, ""
-
-    # Code DNA
-    try:
-        samples = fetcher.get_code_samples(username)
-        dna_traits = analyze_style(samples)
-        dna_svg = generate_dna_svg(dna_traits)
-    except Exception:
-        dna_traits, dna_svg = {}, ""
     
     # Pipeline Execution with Progress Tracking
     with st.status("🔍 Analyzing GitHub Profile...") as status:
         status.update(label="📡 Fetching repository & commit data...", state="running")
         raw = fetcher.get_user_data(username)
         
+        # Process data for local analysis
         commits = raw["commits"]
         lang_df = aggregate_languages(raw["lang_totals"])
-        heatmap_pivot = build_heatmap_data(commits)
-        activity = peak_hours_summary(heatmap_pivot)
+        
+        # Corrected Analytical Calls
+        heatmap_pivot, activity = commit_activity_heatmap(commits)
         sentiment = sentiment_analysis([c["message"] for c in commits])
         topics = lda_topics([c["message"] for c in commits])
-        wc_path = generate_wordcloud([c["message"] for c in commits], username)
-        quality = score_commits([c["message"] for c in commits])
-        repo_scores = [score_repo(r) for r in raw["repos"]]
-        health_stats = aggregate_health(repo_scores)
         
-        user_stats = {
-            "commit_hours": [c["hour"] for c in commits],
-            "commit_weekdays": [c["weekday"] for c in commits],
-            "repos": raw["repos"],
-            "dominant_topic": topics["dominant_topic"],
-            "avg_sentiment": sentiment["avg_polarity"],
-            "prs_authored": raw["prs_authored"],
-            "issues_authored": raw["issues_authored"],
-            "followers": raw["profile"].get("followers", 0),
-        }
-        badges = classify(user_stats)
+        # Wordcloud (proper arg)
+        wc_path = generate_wordcloud([c["message"] for c in commits])
+        
+        # Commit Quality & Repo Health
+        quality = score_commit_quality(commits)
+        repo_scores, health_stats = aggregate_repo_health(raw["repos"])
+        
+        user_stats = aggregate_user_stats(raw["profile"], raw["repos"], commits)
+        badges = classify(commits, raw["repos"])
         narrative = generate_narrative(user_stats, raw["profile"])
         achievements = achievement_trophy_case(user_stats, raw["profile"], lang_df)
 
