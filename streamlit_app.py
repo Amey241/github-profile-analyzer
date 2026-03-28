@@ -331,19 +331,16 @@ def run_pipeline(username: str, token: str) -> dict:
         repo_deps = fetcher.get_dependencies(username)
         ecosystem_html = build_ecosystem_graph(repo_deps)
     except Exception:
-        ecosystem_html = ""
-
-    # AI Insights
-    try:
-        ai = AIInsights()
-        job_roles = ai.get_job_role_suggestions(user_stats, lang_df)
+    
+    with st.status("🔍 Analyzing GitHub Profile...") as status:
+        status.update(label="📡 Fetching repository & commit data...", state="running")
+        raw = fetcher.get_user_data(username)
+        
+        status.update(label="🧬 Running Deep Style Audit & Code DNA...", state="running")
+        code_samples = fetcher.get_code_samples(username)
+        
+        status.update(label="🧠 Analyzing Sentiment & Team Collaboration...", state="running")
         review_comments = fetcher.get_review_comments(username)
-        review_personality = ai.analyze_review_personality(review_comments)
-        low_q_commits = [m for m, s, g in quality.get("worst_examples", [])[:3]]
-        rewrites = ai.suggest_commit_rewrites(low_q_commits)
-    except Exception:
-        job_roles, review_personality, rewrites = [], {"archetype": "The Observer", "trait": "Neutral", "advice": ""}, []
-
     # Deep Metrics
     try:
         bus_stats = estimate_bus_factor(raw["repos"])

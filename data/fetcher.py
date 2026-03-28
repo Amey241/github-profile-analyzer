@@ -96,7 +96,7 @@ class GitHubFetcher:
                 # 1. Commits (capped)
                 # Ensure we only fetch author's commits
                 commits_iter = repo.get_commits(author=username)
-                for commit in commits_iter[:LDA_MAX_COMMITS]:
+                for commit in commits_iter[:REPO_COMMIT_CAP]:
                     author_info = commit.commit.author
                     if author_info and author_info.date:
                         ts = author_info.date

@@ -8,7 +8,8 @@ CACHE_TTL_HOURS = 1
 
 # LDA settings
 LDA_N_TOPICS = 4
-LDA_MAX_COMMITS = 2000   # cap to avoid very long analysis
+REPO_COMMIT_CAP = 100    # cap per repo to stay fast
+TOTAL_COMMIT_CAP = 1000  # overall cap for NLP/WordCloud
 
 # Personality badge thresholds
 NIGHT_OWL_THRESHOLD = 0.25        # >25% commits between midnight and 4am
