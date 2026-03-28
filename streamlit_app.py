@@ -311,38 +311,54 @@ def run_pipeline(username: str, token: str) -> dict:
     achievements = achievement_trophy_case(user_stats, raw["profile"], lang_df)
 
     # Career Arc
-    arc_df = analyze_career_arc(commits)
-    arc_viz = career_arc_timeline(arc_df)
-    capsule = time_capsule_message(arc_df, raw["profile"])
+    try:
+        arc_df = analyze_career_arc(commits)
+        arc_viz = career_arc_timeline(arc_df)
+        capsule = time_capsule_message(arc_df, raw["profile"])
+    except Exception:
+        arc_df, arc_viz, capsule = pd.DataFrame(), None, ""
 
     # Code DNA
-    samples = fetcher.get_code_samples(username)
-    dna_traits = analyze_style(samples)
-    dna_svg = generate_dna_svg(dna_traits)
+    try:
+        samples = fetcher.get_code_samples(username)
+        dna_traits = analyze_style(samples)
+        dna_svg = generate_dna_svg(dna_traits)
+    except Exception:
+        dna_traits, dna_svg = {}, ""
 
     # Dependency Ecosystem
-    repo_deps = fetcher.get_dependencies(username)
-    ecosystem_html = build_ecosystem_graph(repo_deps)
+    try:
+        repo_deps = fetcher.get_dependencies(username)
+        ecosystem_html = build_ecosystem_graph(repo_deps)
+    except Exception:
+        ecosystem_html = ""
 
     # AI Insights
-    ai = AIInsights()
-    job_roles = ai.get_job_role_suggestions(user_stats, lang_df)
-    
-    review_comments = fetcher.get_review_comments(username)
-    review_personality = ai.analyze_review_personality(review_comments)
-    
-    low_q_commits = [m for m, s, g in quality.get("worst_examples", [])[:3]]
-    rewrites = ai.suggest_commit_rewrites(low_q_commits)
+    try:
+        ai = AIInsights()
+        job_roles = ai.get_job_role_suggestions(user_stats, lang_df)
+        review_comments = fetcher.get_review_comments(username)
+        review_personality = ai.analyze_review_personality(review_comments)
+        low_q_commits = [m for m, s, g in quality.get("worst_examples", [])[:3]]
+        rewrites = ai.suggest_commit_rewrites(low_q_commits)
+    except Exception:
+        job_roles, review_personality, rewrites = [], {"archetype": "The Observer", "trait": "Neutral", "advice": ""}, []
 
     # Deep Metrics
-    bus_stats = estimate_bus_factor(raw["repos"])
-    streak_stats = calculate_streaks(commits)
-    invisible_stats = invisible_work_audit({
-        "prs_authored": raw["prs_authored"],
-        "issues_authored": raw["issues_authored"],
-        "review_comments": review_comments
-    })
-    ghosts = ghost_repo_audit(raw["repos"])
+    try:
+        bus_stats = estimate_bus_factor(raw["repos"])
+        streak_stats = calculate_streaks(commits)
+        invisible_stats = invisible_work_audit({
+            "prs_authored": raw["prs_authored"],
+            "issues_authored": raw["issues_authored"],
+            "review_comments": review_comments if 'review_comments' in locals() else []
+        })
+        ghosts = ghost_repo_audit(raw["repos"])
+    except Exception:
+        bus_stats = {"factors": [], "avg_factor": 0, "risk": "Unknown"}
+        streak_stats = {"current": 0, "longest": 0}
+        invisible_stats = {"prs": 0, "issues": 0, "reviews": 0, "total_impact": 0}
+        ghosts = []
 
     return {
         "profile": raw["profile"],
