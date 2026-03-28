@@ -127,33 +127,32 @@ class GitHubFetcher:
             repo_samples = []
             repo_deps = []
             try:
-                # 1. Check global cap
+                # 1. Commits (author specific, capped)
+                # Check global cap before starting commit loop
                 with self.lock:
-                    if self.total_commits_fetched >= TOTAL_COMMIT_CAP:
-                        return None
+                    can_fetch_commits = self.total_commits_fetched < TOTAL_COMMIT_CAP
+                
+                if can_fetch_commits:
+                    commits_iter = repo.get_commits(author=username)
+                    for commit in commits_iter[:REPO_COMMIT_CAP]:
+                        with self.lock:
+                            if self.total_commits_fetched >= TOTAL_COMMIT_CAP:
+                                break
+                            self.total_commits_fetched += 1
+                        
+                        ts = commit.commit.author.date
+                        repo_commits.append({
+                            "message": (commit.commit.message or "").split("\n")[0],
+                            "timestamp": str(ts),
+                            "hour": ts.hour if ts else 0,
+                            "weekday": ts.strftime("%A") if ts else "Monday",
+                            "repo_lang": repo.language or "Unknown"
+                        })
 
-                # 2. Commits (author specific, capped)
-                commits_iter = repo.get_commits(author=username)
-                for commit in commits_iter[:REPO_COMMIT_CAP]:
-                    with self.lock:
-                        if self.total_commits_fetched >= TOTAL_COMMIT_CAP:
-                            break
-                        self.total_commits_fetched += 1
-                    
-                    ts = commit.commit.author.date
-                    repo_commits.append({
-                        "message": (commit.commit.message or "").split("\n")[0],
-                        "timestamp": str(ts),
-                        "hour": ts.hour if ts else 0,
-                        "weekday": ts.strftime("%A") if ts else "Monday",
-                        "repo_lang": repo.language or "Unknown"
-                    })
-
-                # 3. Languages & Basic Stats
+                # 2. Languages & Basic Stats
                 langs = repo.get_languages()
                 
-                # 4. SINGLE-PASS CONTENT PEEK (Eliminates recursion)
-                # We do ONE root call to find Readme, License, CI, DNA samples, and Manifests
+                # 3. SINGLE-PASS CONTENT PEEK
                 root_files = []
                 try: 
                     root_files = repo.get_contents("")
@@ -161,24 +160,21 @@ class GitHubFetcher:
 
                 has_readme = any(f.name.lower().startswith("readme") for f in root_files)
                 has_license = any(f.name.lower().startswith("license") for f in root_files)
-                has_ci = any(f.name == ".github" for f in root_files) # Close enough for speed
+                has_ci = any(f.name == ".github" or f.name == ".travis.yml" or f.name == "circle.yml" for f in root_files)
                 
-                # Extract DNA Samples & Manifests from root
+                # Extract DNA Samples & Manifests
                 code_exts = [".py", ".js", ".ts", ".java", ".cpp", ".go", ".rs", ".rb", ".php"]
                 for f in root_files:
                     if f.type == "file":
-                        # DNA
                         if len(repo_samples) < MAX_FILES_PER_REPO_DNA:
                             if any(f.name.endswith(ext) for ext in code_exts):
                                 try:
                                     repo_samples.append({
-                                        "repo": repo.name,
-                                        "path": f.path,
+                                        "repo": repo.name, "path": f.path,
                                         "content": f.decoded_content.decode("utf-8"),
                                         "lang": repo.language
                                     })
                                 except: pass
-                        # Manifests
                         if f.name in MANIFEST_FILES:
                             try:
                                 content = f.decoded_content.decode("utf-8")
@@ -195,7 +191,7 @@ class GitHubFetcher:
                 if repo.pushed_at:
                     recently_active = (datetime.now(timezone.utc) - repo.pushed_at.replace(tzinfo=timezone.utc)).days < 90
 
-                # 5. Bus Factor
+                # 4. Bus Factor & Issues
                 total_stats = self._get_stats_contributors_with_retry(repo)
                 user_share = 0
                 if total_stats:
@@ -215,7 +211,9 @@ class GitHubFetcher:
                         "has_license": has_license,
                         "has_ci": has_ci,
                         "recently_active": recently_active,
+                        "low_open_issues": repo.open_issues_count < 10,
                         "user_share_all_time": user_share,
+                        "contributor_count": len(total_stats) if total_stats else 1,
                         "commit_count": len(repo_commits)
                     },
                     "commits": repo_commits,
