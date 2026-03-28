@@ -325,37 +325,84 @@ def run_pipeline(username: str, token: str) -> dict:
         dna_svg = generate_dna_svg(dna_traits)
     except Exception:
         dna_traits, dna_svg = {}, ""
-
-    # Dependency Ecosystem
-    try:
-        repo_deps = fetcher.get_dependencies(username)
-        ecosystem_html = build_ecosystem_graph(repo_deps)
-    except Exception:
     
+    # Pipeline Execution with Progress Tracking
     with st.status("🔍 Analyzing GitHub Profile...") as status:
         status.update(label="📡 Fetching repository & commit data...", state="running")
         raw = fetcher.get_user_data(username)
         
-        status.update(label="🧬 Running Deep Style Audit & Code DNA...", state="running")
-        code_samples = fetcher.get_code_samples(username)
+        commits = raw["commits"]
+        lang_df = aggregate_languages(raw["lang_totals"])
+        heatmap_pivot = build_heatmap_data(commits)
+        activity = peak_hours_summary(heatmap_pivot)
+        sentiment = sentiment_analysis([c["message"] for c in commits])
+        topics = lda_topics([c["message"] for c in commits])
+        wc_path = generate_wordcloud([c["message"] for c in commits], username)
+        quality = score_commits([c["message"] for c in commits])
+        repo_scores = [score_repo(r) for r in raw["repos"]]
+        health_stats = aggregate_health(repo_scores)
         
-        status.update(label="🧠 Analyzing Sentiment & Team Collaboration...", state="running")
-        review_comments = fetcher.get_review_comments(username)
-    # Deep Metrics
-    try:
-        bus_stats = estimate_bus_factor(raw["repos"])
-        streak_stats = calculate_streaks(commits)
-        invisible_stats = invisible_work_audit({
+        user_stats = {
+            "commit_hours": [c["hour"] for c in commits],
+            "commit_weekdays": [c["weekday"] for c in commits],
+            "repos": raw["repos"],
+            "dominant_topic": topics["dominant_topic"],
+            "avg_sentiment": sentiment["avg_polarity"],
             "prs_authored": raw["prs_authored"],
             "issues_authored": raw["issues_authored"],
-            "review_comments": review_comments if 'review_comments' in locals() else []
-        })
-        ghosts = ghost_repo_audit(raw["repos"])
-    except Exception:
-        bus_stats = {"factors": [], "avg_factor": 0, "risk": "Unknown"}
-        streak_stats = {"current": 0, "longest": 0}
-        invisible_stats = {"prs": 0, "issues": 0, "reviews": 0, "total_impact": 0}
-        ghosts = []
+            "followers": raw["profile"].get("followers", 0),
+        }
+        badges = classify(user_stats)
+        narrative = generate_narrative(user_stats, raw["profile"])
+        achievements = achievement_trophy_case(user_stats, raw["profile"], lang_df)
+
+        status.update(label="🧬 Running Deep Style Audit & Code DNA...", state="running")
+        try:
+            code_samples = fetcher.get_code_samples(username)
+            dna_traits = analyze_style(code_samples)
+            dna_svg = generate_dna_svg(dna_traits)
+        except Exception:
+            dna_traits, dna_svg = {}, ""
+
+        status.update(label="🧠 Analyzing Collaboration & Ecosystem...", state="running")
+        try:
+            repo_deps = fetcher.get_dependencies(username)
+            ecosystem_html = build_ecosystem_graph(repo_deps)
+        except Exception:
+            repo_deps, ecosystem_html = {}, ""
+
+        status.update(label="🎨 Generating AI Insights...", state="running")
+        try:
+            ai = AIInsights()
+            job_roles = ai.get_job_role_suggestions(user_stats, lang_df)
+            review_comments = fetcher.get_review_comments(username)
+            review_personality = ai.analyze_review_personality(review_comments)
+            low_q_commits = [m for m, s, g in quality.get("worst_examples", [])[:3]]
+            rewrites = ai.suggest_commit_rewrites(low_q_commits)
+        except Exception:
+            job_roles, review_personality, rewrites = [], {"archetype": "The Observer", "trait": "Neutral", "advice": ""}, []
+
+        # Deep Metrics
+        try:
+            bus_stats = estimate_bus_factor(raw["repos"])
+            streak_stats = calculate_streaks(commits)
+            arc_df = analyze_career_arc(commits)
+            arc_viz = career_arc_timeline(arc_df)
+            capsule = time_capsule_message(arc_df, raw["profile"])
+            invisible_stats = invisible_work_audit({
+                "prs_authored": raw["prs_authored"],
+                "issues_authored": raw["issues_authored"],
+                "review_comments": review_comments if 'review_comments' in locals() else []
+            })
+            ghosts = ghost_repo_audit(raw["repos"])
+        except Exception:
+            bus_stats = {"factors": [], "avg_factor": 0, "risk": "Unknown"}
+            streak_stats = {"current": 0, "longest": 0}
+            arc_df, arc_viz, capsule = pd.DataFrame(), None, ""
+            invisible_stats = {"prs": 0, "issues": 0, "reviews": 0, "total_impact": 0}
+            ghosts = []
+
+        status.update(label="✅ Analysis Complete!", state="complete")
 
     return {
         "profile": raw["profile"],
