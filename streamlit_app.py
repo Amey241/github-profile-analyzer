@@ -688,15 +688,66 @@ else:
 
     st.divider()
 
+    st.divider()
+
+    # Feature 8 & 5: Sentiment & Ecosystem
+    col_s, col_e = st.columns([1, 1], gap="large")
+    with col_s:
+        st.markdown('<div class="section-header">🎭 Commit Sentiment & Vibe</div>', unsafe_allow_html=True)
+        polarity = data["sentiment"].get("avg_polarity", 0)
+        mood = data["sentiment"].get("mood", "Neutral 😐")
+        
+        # Color based on sentiment
+        color = "#22D3EE" if polarity > 0.1 else "#EC4899" if polarity < -0.05 else "#F9A826"
+        
+        fig = go.Figure(go.Indicator(
+            mode = "gauge+number",
+            value = polarity,
+            domain = {'x': [0, 1], 'y': [0, 1]},
+            title = {'text': mood, 'font': {'size': 24, 'color': color}},
+            gauge = {
+                'axis': {'range': [-1, 1], 'tickwidth': 1, 'tickcolor': "white"},
+                'bar': {'color': color},
+                'bgcolor': "rgba(0,0,0,0)",
+                'borderwidth': 2,
+                'bordercolor': "rgba(255,255,255,0.1)",
+                'steps': [
+                    {'range': [-1, -0.1], 'color': 'rgba(236,72,153,0.1)'},
+                    {'range': [-0.1, 0.1], 'color': 'rgba(249,168,38,0.1)'},
+                    {'range': [0.1, 1], 'color': 'rgba(34,211,238,0.1)'}
+                ],
+            }
+        ))
+        fig.update_layout(paper_bgcolor="rgba(0,0,0,0)", font={'color': "white", 'family': "Arial"}, height=300, margin=dict(t=50, b=20, l=30, r=30))
+        st.plotly_chart(fig, use_container_width=True)
+
+    with col_e:
+        st.markdown('<div class="section-header">🕸 Project Ecosystem</div>', unsafe_allow_html=True)
+        if data["ecosystem_html"]:
+            import streamlit.components.v1 as components
+            components.html(data["ecosystem_html"], height=300)
+        else:
+            st.markdown("""
+            <div class="glass-card" style="height:300px; display:flex; align-items:center; justify-content:center; text-align:center;">
+                <div style="color:#94A3B8;">Insufficient dependency data to map ecosystem.</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+    st.divider()
+
     # AI Job Matcher (Feature 7)
     st.markdown('<div class="section-header">💼 AI Job Role Matcher</div>', unsafe_allow_html=True)
     role_cols = st.columns(3)
-    for i, role in enumerate(data["job_roles"][:3]):
+    roles = data.get("job_roles", [])
+    if not roles:
+        roles = ["Full Stack Developer", "Software Engineer", "Open Source Contributor"] # Fallback
+    
+    for i, role in enumerate(roles[:3]):
         with role_cols[i]:
             st.markdown(f"""
             <div class="glass-card" style="text-align:center; padding:1.5rem; border-color:#22D3EE;">
-              <div style="font-size:0.8rem; color:#22D3EE; font-weight:700;">#{i+1} RECOMMENDATION</div>
-              <div style="font-size:1.1rem; font-weight:700; color:#FFFFFF; margin-top:0.5rem;">{role}</div>
+                <div style="font-size:0.8rem; color:#22D3EE; font-weight:700;">#{i+1} RECOMMENDATION</div>
+                <div style="font-size:1.1rem; font-weight:700; color:#FFFFFF; margin-top:0.5rem;">{role}</div>
             </div>
             """, unsafe_allow_html=True)
     
