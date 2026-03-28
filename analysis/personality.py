@@ -2,12 +2,7 @@
 analysis/personality.py
 Rule-based personality badge classifier.
 """
-
-def _to_number(value, default=0):
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return default
+from utils.sanitize import safe_float, safe_int
 
 from config import (
     NIGHT_OWL_THRESHOLD,
@@ -82,7 +77,7 @@ def classify(user_stats: dict) -> list[dict]:
 
     # ---- Prolific Committer ----
     if n_repos > 0:
-        avg_commits = sum(_to_number(r.get("commit_count", 0), 0) for r in repos) / n_repos
+        avg_commits = sum(safe_float(r.get("commit_count", 0), 0) for r in repos) / n_repos
         if avg_commits > PROLIFIC_COMMITTER_THRESHOLD:
             badges.append({
                 "badge": "🔥 Prolific Committer",
@@ -197,13 +192,13 @@ def achievement_trophy_case(user_stats: dict, profile: dict, lang_df: any) -> li
     if night >= 500: achievements[0]["unlocked"] = True
     
     repos = user_stats.get("repos", [])
-    if any(r.get("stars", 0) >= 1000 for r in repos): achievements[1]["unlocked"] = True
+    if any(safe_int(r.get("stars", 0), 0) >= 1000 for r in repos): achievements[1]["unlocked"] = True
     
     if len(lang_df) >= 7: achievements[2]["unlocked"] = True
     
     if user_stats.get("dominant_topic") == "refactor": achievements[3]["unlocked"] = True # Simplified check
     
-    if user_stats.get("issues_authored", 0) >= 200: achievements[4]["unlocked"] = True
+    if safe_int(user_stats.get("issues_authored", 0), 0) >= 200: achievements[4]["unlocked"] = True
 
     return achievements
 

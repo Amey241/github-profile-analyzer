@@ -5,12 +5,7 @@ Advanced data metrics like Bus Factor, Invisible Work, and Streak Intelligence.
 
 from datetime import datetime, timedelta
 import pandas as pd
-
-def _to_number(value, default=0):
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return default
+from utils.sanitize import safe_float, safe_int
 
 def estimate_bus_factor(repos: list[dict]) -> dict:
     """
@@ -18,9 +13,11 @@ def estimate_bus_factor(repos: list[dict]) -> dict:
     """
     factors = []
     for r in repos:
+        if not r.get("bus_factor_ready"):
+            continue
         # Use full-history share if available (provided by fetcher)
-        user_share = _to_number(r.get("user_share_all_time", 0), 0)
-        n_contribs = max(int(_to_number(r.get("contributor_count", 1), 1)), 1)
+        user_share = safe_float(r.get("user_share_all_time", 0), 0)
+        n_contribs = max(safe_int(r.get("contributor_count", 1), 1), 1)
         
         # Heuristic for project sustainability:
         # If one person does 80%+ work (all time), factor is 1 (high risk)
@@ -40,12 +37,12 @@ def estimate_bus_factor(repos: list[dict]) -> dict:
         })
     
     if not factors:
-        return {"factors": [], "avg_factor": 0, "risk": "N/A (No commits found)"}
+        return {"factors": [], "avg_factor": 0, "risk": "Not enough data", "repos_analyzed": 0}
         
     avg_factor = sum(f["factor"] for f in factors) / len(factors)
     risk = "High 🔴" if avg_factor < 1.5 else "Medium 🟡" if avg_factor < 3 else "Low 🟢"
     
-    return {"factors": factors, "avg_factor": round(avg_factor, 1), "risk": risk}
+    return {"factors": factors, "avg_factor": round(avg_factor, 1), "risk": risk, "repos_analyzed": len(factors)}
 
 def calculate_streaks(commits: list[dict]) -> dict:
     """
@@ -53,8 +50,18 @@ def calculate_streaks(commits: list[dict]) -> dict:
     """
     if not commits:
         return {"current": 0, "longest": 0}
-    
-    dates = sorted(list(set([c["date"].split("T")[0] for c in commits])), reverse=True)
+
+    date_strings = []
+    for commit in commits:
+        raw_date = commit.get("date") or commit.get("timestamp")
+        if not raw_date:
+            continue
+        raw_date = str(raw_date)
+        normalized = raw_date.split("T")[0].split(" ")[0]
+        if normalized:
+            date_strings.append(normalized)
+
+    dates = sorted(list(set(date_strings)), reverse=True)
     if not dates:
         return {"current": 0, "longest": 0}
 
@@ -92,14 +99,18 @@ def invisible_work_audit(user_data: dict) -> dict:
     """
     Highlight PR reviews, issues, and discussions.
     """
-    prs = int(_to_number(user_data.get("prs_authored", 0), 0))
-    issues = int(_to_number(user_data.get("issues_authored", 0), 0))
-    reviews = len(user_data.get("review_comments") or [])
+    prs = safe_int(user_data.get("prs_authored", 0), 0)
+    issues = safe_int(user_data.get("issues_authored", 0), 0)
+    reviews = safe_int(user_data.get("pr_reviews_count", 0), 0)
+    issue_comments = safe_int(user_data.get("issue_comments_count", 0), 0)
     return {
         "prs": prs,
         "issues": issues,
         "reviews": reviews,
-        "total_impact": prs + issues + reviews
+        "issue_comments": issue_comments,
+        "total_impact": (prs * 3) + (reviews * 2) + issues + issue_comments,
+        "invisible_pct": round(((reviews + issues + issue_comments) / max(prs + reviews + issues + issue_comments, 1)) * 100),
+        "is_empty": (prs + issues + reviews + issue_comments) == 0
     }
 
 def ghost_repo_audit(repos: list[dict]) -> list:

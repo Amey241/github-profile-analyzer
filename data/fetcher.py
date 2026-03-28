@@ -18,26 +18,21 @@ from config import (
     API_WORKERS, MAX_REPOS_TO_ANALYZE, TOTAL_COMMIT_CAP,
     MAX_FILES_PER_REPO_DNA, MAX_REPOS_FOR_CONTRIBUTOR_STATS
 )
+from utils.sanitize import safe_float, safe_int
 
 class GitHubFetcher:
     def __init__(self, token: str):
-        self.g = Github(token, per_page=100)
+        self.g = Github(token, per_page=100) if token else Github(per_page=100)
         self.lock = threading.Lock()
         self.total_commits_fetched = 0
 
     @staticmethod
     def _to_int(value, default: int = 0) -> int:
-        try:
-            return int(value)
-        except (TypeError, ValueError):
-            return default
+        return safe_int(value, default)
 
     @staticmethod
     def _to_float(value, default: float = 0.0) -> float:
-        try:
-            return float(value)
-        except (TypeError, ValueError):
-            return default
+        return safe_float(value, default)
 
     def get_rate_limit(self):
         """Return rate limit info for the UI."""
@@ -114,6 +109,7 @@ class GitHubFetcher:
             for key in ("stars", "forks", "commit_count", "contributor_count", "open_issues_count"):
                 normalized_repo[key] = self._to_int(normalized_repo.get(key, 0))
             normalized_repo["user_share_all_time"] = self._to_float(normalized_repo.get("user_share_all_time", 0.0))
+            normalized_repo["bus_factor_ready"] = bool(normalized_repo.get("bus_factor_ready", False))
             normalized_repos.append(normalized_repo)
         data["repos"] = normalized_repos
 
@@ -135,6 +131,8 @@ class GitHubFetcher:
         }
         data["issues_authored"] = self._to_int(data.get("issues_authored", 0))
         data["prs_authored"] = self._to_int(data.get("prs_authored", 0))
+        data["pr_reviews_count"] = self._to_int(data.get("pr_reviews_count", 0))
+        data["issue_comments_count"] = self._to_int(data.get("issue_comments_count", 0))
         return data
 
     # ------------------------------------------------------------------ #
@@ -215,7 +213,13 @@ class GitHubFetcher:
                         })
 
                 # 2. Languages & Basic Stats
-                langs = repo.get_languages()
+                raw_langs = repo.get_languages()
+                langs = {}
+                for lang, value in raw_langs.items():
+                    coerced = self._to_int(value, None)
+                    if coerced is None:
+                        continue
+                    langs[lang] = coerced
                 
                 # 3. SINGLE-PASS CONTENT PEEK
                 root_files = []
@@ -261,11 +265,20 @@ class GitHubFetcher:
                 if index < MAX_REPOS_FOR_CONTRIBUTOR_STATS:
                     total_stats = self._get_stats_contributors_with_retry(repo)
                 user_share = 0
+                contributor_count = 0
                 if total_stats:
-                    total_commits_all = sum(c.total for c in total_stats)
+                    contributor_count = sum(1 for c in total_stats if self._to_int(getattr(c, "total", 0), 0) > 0)
+                    total_commits_all = sum(self._to_int(getattr(c, "total", 0), 0) for c in total_stats)
                     if total_commits_all > 0:
-                        user_stat = next((c for c in total_stats if c.author and c.author.login == username), None)
-                        if user_stat: user_share = (user_stat.total / total_commits_all) * 100
+                        user_stat = next(
+                            (
+                                c for c in total_stats
+                                if c.author and getattr(c.author, "login", "").lower() == username.lower()
+                            ),
+                            None
+                        )
+                        if user_stat:
+                            user_share = (self._to_int(getattr(user_stat, "total", 0), 0) / total_commits_all) * 100
 
                 return {
                     "repo_data": {
@@ -280,7 +293,8 @@ class GitHubFetcher:
                         "recently_active": recently_active,
                         "low_open_issues": repo.open_issues_count < 10,
                         "user_share_all_time": user_share,
-                        "contributor_count": len(total_stats) if total_stats else 1,
+                        "contributor_count": contributor_count,
+                        "bus_factor_ready": bool(total_stats and contributor_count > 0),
                         "commit_count": len(repo_commits)
                     },
                     "commits": repo_commits,
@@ -314,11 +328,17 @@ class GitHubFetcher:
         # PRs & Issues (Robust totalCount)
         issues_authored = 0
         prs_authored = 0
+        pr_reviews_count = 0
+        issue_comments_count = 0
         try:
-            issue_search = self.g.search_issues(f"author:{username} is:issue")
-            prs_search = self.g.search_issues(f"author:{username} is:pr")
+            issue_search = self.g.search_issues(f"author:{username} is:issue is:public")
+            prs_search = self.g.search_issues(f"author:{username} is:pr is:public")
+            reviews_search = self.g.search_issues(f"reviewed-by:{username} is:pr is:public")
+            comments_search = self.g.search_issues(f"commenter:{username} is:issue is:public")
             issues_authored = issue_search.totalCount
             prs_authored = prs_search.totalCount
+            pr_reviews_count = reviews_search.totalCount
+            issue_comments_count = comments_search.totalCount
         except: pass
 
         return {
@@ -328,6 +348,8 @@ class GitHubFetcher:
             "lang_totals": lang_totals,
             "issues_authored": issues_authored,
             "prs_authored": prs_authored,
+            "pr_reviews_count": pr_reviews_count,
+            "issue_comments_count": issue_comments_count,
             "all_samples": all_samples,
             "all_deps": all_deps
         }

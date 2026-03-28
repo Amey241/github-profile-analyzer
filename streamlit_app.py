@@ -160,6 +160,19 @@ st.markdown("""
     box-shadow: 0 0 15px rgba(108,99,255,0.3) !important;
   }
 
+  input[type="password"]::-ms-reveal,
+  input[type="password"]::-ms-clear {
+    display: none !important;
+  }
+  div[data-baseweb="input"] button[aria-label*="password"],
+  div[data-baseweb="input"] button[aria-label*="Password"],
+  div[data-baseweb="input"] button[aria-label*="Show"],
+  div[data-baseweb="input"] button[aria-label*="Hide"] {
+    display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+  }
+
   /* Specific Button Contrast Fixes */
   .stDownloadButton button {
     background-color: #FFFFFF !important;
@@ -272,8 +285,17 @@ from analysis.deep_metrics import estimate_bus_factor, calculate_streaks, invisi
 # ------------------------------------------------------------------ #
 #  Cached Pipeline
 # ------------------------------------------------------------------ #
+def get_configured_github_token() -> str:
+    try:
+        secret_token = st.secrets.get("GITHUB_TOKEN", "")
+    except Exception:
+        secret_token = ""
+    return (secret_token or os.getenv("GITHUB_TOKEN", "")).strip()
+
+
 @st.cache_data(ttl=3600, show_spinner=False)
-def run_pipeline(username: str, token: str) -> dict:
+def run_pipeline(username: str, _token_override: str = "") -> dict:
+    token = (_token_override or get_configured_github_token()).strip()
     fetcher = GitHubFetcher(token)
 
     # Pipeline Execution with Progress Tracking
@@ -352,14 +374,15 @@ def run_pipeline(username: str, token: str) -> dict:
             invisible_stats = invisible_work_audit({
                 "prs_authored": raw["prs_authored"],
                 "issues_authored": raw["issues_authored"],
-                "review_comments": review_comments if 'review_comments' in locals() else []
+                "pr_reviews_count": raw.get("pr_reviews_count", 0),
+                "issue_comments_count": raw.get("issue_comments_count", 0),
             })
             ghosts = ghost_repo_audit(raw["repos"])
         except Exception:
             bus_stats = {"factors": [], "avg_factor": 0, "risk": "Unknown"}
             streak_stats = {"current": 0, "longest": 0}
             arc_df, arc_viz, capsule = pd.DataFrame(), None, ""
-            invisible_stats = {"prs": 0, "issues": 0, "reviews": 0, "total_impact": 0}
+            invisible_stats = {"prs": 0, "issues": 0, "reviews": 0, "issue_comments": 0, "total_impact": 0, "invisible_pct": 0, "is_empty": True}
             ghosts = []
 
         status.update(label="✅ Analysis Complete!", state="complete")
@@ -405,15 +428,18 @@ with st.sidebar:
     st.markdown("Uncover any developer's coding personality through data.")
     st.divider()
 
-    env_token = os.getenv("GITHUB_TOKEN", "")
-    token_input = st.text_input(
-        "GitHub Personal Access Token",
-        value=env_token,
-        type="password",
-        placeholder="ghp_xxxxxxxxxxxx",
-        help="Generate at github.com/settings/tokens — no scopes needed for public repos.",
-    )
-    token = token_input or env_token
+    configured_token = get_configured_github_token()
+    if configured_token:
+        token = ""
+    else:
+        token_input = st.text_input(
+            "GitHub Personal Access Token",
+            value="",
+            type="password",
+            placeholder="ghp_xxxxxxxxxxxx",
+            help="Generate at github.com/settings/tokens — no scopes needed for public repos.",
+        )
+        token = token_input.strip()
 
     st.divider()
     
@@ -439,12 +465,19 @@ with st.sidebar:
     
     st.divider()
     st.markdown("**How to use**")
-    st.markdown("""
+    if configured_token:
+        st.markdown("""
+1. Enter username(s)  
+2. Hit **Enter** — wait ~30 s  
+3. Explore the insights!
+        """)
+    else:
+        st.markdown("""
 1. Paste your GitHub token above  
 2. Enter username(s)  
 3. Hit **Enter** — wait ~30 s  
 4. Explore the insights!
-    """)
+        """)
     st.divider()
     st.caption("Rate limit: 5,000 req/hr with token. Results cached 1 hr.")
 
@@ -639,7 +672,6 @@ else:
             mime="image/png",
             use_container_width=True,
         )
-        st.button("✨ Share on X (Twitter)", use_container_width=True, disabled=True)
 
     # Badges
     st.markdown('<div class="section-header">🏅 Personality Badges</div>', unsafe_allow_html=True)
@@ -882,6 +914,12 @@ else:
     with col_bus:
         st.markdown('<div class="section-header">🚌 Bus Factor Estimation</div>', unsafe_allow_html=True)
         bus = data["bus_stats"]
+        bus_ratio = f"{bus['avg_factor']}" if bus.get("avg_factor", 0) else "N/A"
+        bus_note = (
+            f"Calculated from {bus.get('repos_analyzed', 0)} repos with contributor history."
+            if bus.get("repos_analyzed", 0)
+            else "GitHub has not returned contributor history yet. Retry in a bit or use a token with enough API quota."
+        )
         st.markdown(f"""
         <div class="glass-card" style="padding:1.5rem;">
           <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -890,19 +928,19 @@ else:
               <div style="font-size:1.5rem; font-weight:700;">{bus['risk']}</div>
             </div>
             <div style="text-align:right;">
-              <div style="font-size:2rem; font-weight:800; color:#6C63FF;">{bus['avg_factor']}</div>
+              <div style="font-size:2rem; font-weight:800; color:#6C63FF;">{bus_ratio}</div>
               <div style="font-size:0.7rem; color:#E2E8F0;">AVG RATIO</div>
             </div>
           </div>
           <div style="margin-top:1rem; font-size:0.85rem; color:#E2E8F0;">
-            A factor of 1 means you are the sole knowledge holder. Projects with high stars and low factors are 'knowledge silos'.
+            {bus_note}
           </div>
         </div>
         """, unsafe_allow_html=True)
 
     with col_ghost:
         st.markdown('<div class="section-header">🛡️ Invisible Work Audit</div>', unsafe_allow_html=True)
-        inv = data.get("invisible_stats", {"prs": 0, "issues": 0, "reviews": 0, "total_impact": 0, "is_empty": True})
+        inv = data.get("invisible_stats", {"prs": 0, "issues": 0, "reviews": 0, "issue_comments": 0, "total_impact": 0, "invisible_pct": 0, "is_empty": True})
         st.markdown(f"""
         <div class="glass-card" style="padding:1.5rem;">
           <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1.5rem;">
@@ -915,8 +953,18 @@ else:
               <div style="font-size:1.5rem; font-weight:700; color:#EC4899;">{inv['total_impact']}</div>
             </div>
           </div>
+          <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1.5rem; margin-top:1rem;">
+            <div>
+              <div style="font-size:0.8rem; color:#CBD5E1;">PRS AUTHORED</div>
+              <div style="font-size:1.2rem; font-weight:700; color:#FFFFFF;">{inv['prs']}</div>
+            </div>
+            <div>
+              <div style="font-size:0.8rem; color:#CBD5E1;">ISSUE COMMENTS</div>
+              <div style="font-size:1.2rem; font-weight:700; color:#FFFFFF;">{inv['issue_comments']}</div>
+            </div>
+          </div>
           <div style="margin-top:1rem; font-size:0.85rem; color:#E2E8F0;">
-            { 'Beyond commits: you contribute via <b>' + str(inv["reviews"]) + '</b> reviews. This is your "silent" influence.' if not inv.get("is_empty") else 'No public PRs, issues, or reviews found. This usually means you focus primarily on direct commits to main.' }
+            {('About <b>' + str(inv["invisible_pct"]) + '%</b> of visible public collaboration comes from reviews, issues, and comments outside direct PR authorship.') if not inv.get("is_empty") else 'No public PRs, issues, reviews, or issue comments found. This is normal for developers working mostly in personal repos or private collaboration spaces.'}
           </div>
         </div>
         """, unsafe_allow_html=True)

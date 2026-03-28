@@ -6,6 +6,7 @@ Aggregate language bytes and build a Plotly radar chart.
 import pandas as pd
 import plotly.graph_objects as go
 from config import ACCENT_COLORS
+from utils.sanitize import safe_int, safe_sum
 
 
 def aggregate_languages(lang_totals: dict) -> pd.DataFrame:
@@ -13,10 +14,14 @@ def aggregate_languages(lang_totals: dict) -> pd.DataFrame:
     if not lang_totals:
         return pd.DataFrame(columns=["language", "bytes", "pct"])
 
-    df = pd.DataFrame(lang_totals.items(), columns=["language", "bytes"])
-    df["bytes"] = pd.to_numeric(df["bytes"], errors="coerce").fillna(0)
+    cleaned = [(language, safe_int(byte_count, 0)) for language, byte_count in lang_totals.items()]
+    cleaned = [(language, byte_count) for language, byte_count in cleaned if byte_count > 0]
+    if not cleaned:
+        return pd.DataFrame(columns=["language", "bytes", "pct"])
+
+    df = pd.DataFrame(cleaned, columns=["language", "bytes"])
     df = df.sort_values("bytes", ascending=False).reset_index(drop=True)
-    total_bytes = df["bytes"].sum()
+    total_bytes = safe_sum(df["bytes"].tolist(), 0)
     df["pct"] = df["bytes"] / total_bytes * 100 if total_bytes > 0 else 0
 
     # Keep top-12, group the rest as "Other"
