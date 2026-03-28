@@ -670,13 +670,21 @@ else:
                 </div>
             </div>
             """, unsafe_allow_html=True)
-
-        <div style="margin-top:1.5rem; padding:1rem; background:rgba(249,168,38,0.1); border-radius:10px; border: 1px dashed rgba(249,168,38,0.3);">
-            <div style="font-size:0.8rem; color:#F9A826; font-weight:700; text-transform:uppercase;">Time Capsule Reflection</div>
-            <div style="margin-top:0.5rem; color:#E2E8F0;">{data.get('capsule', 'Keep pushing commits to see your career evolution.')}</div>
+    # Feature 2 & 6: Developer Archetype & Story
+    if data.get("narrative") or data.get("capsule"):
+        st.divider()
+        st.markdown('<div class="section-header">📜 Developer Archetype & Story</div>', unsafe_allow_html=True)
+        st.markdown(f"""
+        <div class="glass-card" style="padding:2rem; border-left: 5px solid #F9A826;">
+            <div style="font-size:1.2rem; line-height:1.7; font-style:italic; color:#E2E8F0;">
+                "{data.get('narrative', 'Your story is still being written...')}"
+            </div>
+            <div style="margin-top:1.5rem; padding:1rem; background:rgba(249,168,38,0.1); border-radius:10px; border: 1px dashed rgba(249,168,38,0.3);">
+                <div style="font-size:0.8rem; color:#F9A826; font-weight:700; text-transform:uppercase;">Time Capsule Reflection</div>
+                <div style="margin-top:0.5rem; color:#E2E8F0;">{data.get('capsule', 'Keep pushing commits to see your career evolution.')}</div>
+            </div>
         </div>
-    </div>
-    """, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
 
     # Feature 12: Hidden Achievements (Always try to show some)
     unlocked = [a for a in data.get("achievements", []) if a["unlocked"]]
@@ -838,7 +846,7 @@ else:
                         st.markdown(f"""
                         <div style="font-size:0.8rem; margin-bottom:0.5rem; padding:0.5rem; border-left:2px solid #6C63FF; background:rgba(108,99,255,0.05);">
                           <div style="color:#94A3B8;"><s>{rw['old']}</s></div>
-                          <div style="color:#6C63FF; font-weight:600;">→ {rw['new']}</div>
+                          <div style="color:#6C63FF; font-weight:600;">-> {rw['new']}</div>
                         </div>
                         """, unsafe_allow_html=True)
 
