@@ -851,6 +851,29 @@ else:
 
     # DEEP DATA METRICS SECTION
     st.divider()
+    col_bus, col_ghost = st.columns(2, gap="large")
+    
+    with col_bus:
+        st.markdown('<div class="section-header">🚌 Bus Factor Estimation</div>', unsafe_allow_html=True)
+        bus = data["bus_stats"]
+        st.markdown(f"""
+        <div class="glass-card" style="padding:1.5rem;">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <div>
+              <div style="font-size:0.8rem; color:#CBD5E1;">CENTRALIZATION RISK</div>
+              <div style="font-size:1.5rem; font-weight:700;">{bus['risk']}</div>
+            </div>
+            <div style="text-align:right;">
+              <div style="font-size:2rem; font-weight:800; color:#6C63FF;">{bus['avg_factor']}</div>
+              <div style="font-size:0.7rem; color:#E2E8F0;">AVG RATIO</div>
+            </div>
+          </div>
+          <div style="margin-top:1rem; font-size:0.85rem; color:#E2E8F0;">
+            A factor of 1 means you are the sole knowledge holder. Projects with high stars and low factors are 'knowledge silos'.
+          </div>
+        </div>
+        """, unsafe_allow_html=True)
+
     with col_ghost:
         st.markdown('<div class="section-header">🛡️ Invisible Work Audit</div>', unsafe_allow_html=True)
         inv = data["invisible_stats"]
