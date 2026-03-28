@@ -437,6 +437,9 @@ with st.sidebar:
         show_rate_limit(fetcher if 'fetcher' in locals() else globals().get('fetcher'))
     
     st.divider()
+    mode = st.radio("Analysis Mode", ["Single Profile", "Compare Mode"], index=0)
+    
+    st.divider()
     st.markdown("**How to use**")
     st.markdown("""
 1. Paste your GitHub token above  
