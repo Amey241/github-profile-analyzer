@@ -631,6 +631,9 @@ else:
             </div>
             """, unsafe_allow_html=True)
 
+    # Feature 1: Code DNA Fingerprint
+    if data.get("dna_svg"):
+        st.divider()
         st.markdown('<div class="section-header">🧬 Code DNA Fingerprint</div>', unsafe_allow_html=True)
         col1, col2 = st.columns([1, 1.5], gap="large")
         with col1:
